@@ -8,6 +8,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app/
 
-EXPOSE 5000
+# Create data directory for SQLite
+RUN mkdir -p /data
+ENV DATABASE_URL=sqlite:////data/vote_system.db
 
-CMD ["flask", "run", "--host=0.0.0.0"]
+EXPOSE 8080
+
+# Use Gunicorn as the production server
+CMD ["gunicorn", "--bind", "0.0.0.0:8080", "wsgi:app"]

@@ -15,8 +15,9 @@
 
 - **後端**：Flask
 - **前端**：HTML, CSS, jQuery, Bootstrap
-- **資料庫**：PostgreSQL
+- **資料庫**：PostgreSQL / SQLite
 - **容器化**：Docker
+- **部署**：Fly.io
 
 ## 安裝與運行
 
@@ -82,3 +83,76 @@
 4. **匯出記錄**：
    - 點擊「匯出結果」將開票記錄匯出為Excel檔案
    - Excel檔案包含開票結果和詳細的投票記錄
+
+## 部署到 Fly.io
+
+本系統可以輕鬆部署到 Fly.io 雲平台上。以下是部署步驟：
+
+### 準備工作
+
+1. 註冊 [Fly.io](https://fly.io) 帳號
+2. 安裝 Fly CLI
+   ```bash
+   # Windows (PowerShell)
+   iwr https://fly.io/install.ps1 -useb | iex
+
+   # MacOS/Linux
+   curl -L https://fly.io/install.sh | sh
+   ```
+3. 登入 Fly.io
+   ```bash
+   fly auth login
+   ```
+
+### 部署步驟
+
+1. 確保專案中有下列檔案：
+   - `fly.toml` (Fly.io 配置檔)
+   - `Dockerfile` (容器配置檔)
+   - `requirements.txt` (Python 依賴)
+   - `wsgi.py` (WSGI 入口點)
+
+2. 創建 Fly.io 應用程式
+   ```bash
+   fly apps create voting-counting-system
+   ```
+
+3. 為 SQLite 數據庫創建持久化卷
+   ```bash
+   fly volumes create sqlite_data --size 1 --app voting-counting-system --region sin
+   ```
+
+4. 部署應用程式
+   ```bash
+   fly deploy
+   ```
+
+5. 查看部署日誌
+   ```bash
+   fly logs
+   ```
+
+6. 開啟應用程式
+   ```bash
+   fly open
+   ```
+
+現在你的應用程式已經成功部署到 Fly.io，可以通過以下網址訪問：
+```
+https://voting-counting-system.fly.dev
+```
+
+### 更新應用程式
+
+當你需要更新應用程式時，只需修改代碼後重新部署：
+```bash
+fly deploy
+```
+
+### 常見問題
+
+1. **數據持久化**：應用程式使用 Fly.io 的 volumes 功能來保存 SQLite 數據庫，確保數據不會在部署之間丟失。
+
+2. **自定義域名**：如需使用自定義域名，請參考 [Fly.io 文檔](https://fly.io/docs/app-guides/custom-domains-with-fly/)。
+
+3. **伸縮應用**：可以使用 `fly scale` 命令調整應用程式的資源配置。
