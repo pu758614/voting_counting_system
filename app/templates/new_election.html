@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block title %}新增投票 - 投票開票系統{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-md-12">
+        <h1>新增投票</h1>
+        <p class="lead">設定投票的基本資訊、候選人和當選條件。</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5>投票設定</h5>
+            </div>
+            <div class="card-body">
+                <form id="election-form">
+                    <div class="mb-3">
+                        <label for="title" class="form-label">投票標題</label>
+                        <input type="text" class="form-control" id="title" name="title" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="total_voters" class="form-label">總投票人數</label>
+                        <input type="number" class="form-control" id="total_voters" name="total_voters" min="1" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">當選條件</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="threshold_type" id="threshold_percentage" value="percentage" checked>
+                            <label class="form-check-label" for="threshold_percentage">
+                                獲得總投票人數的百分比
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="threshold_type" id="threshold_majority" value="majority">
+                            <label class="form-check-label" for="threshold_majority">
+                                過半數 (超過50%)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div id="percentage-container" class="mb-3">
+                        <label for="threshold_value" class="form-label">百分比 (%)</label>
+                        <input type="number" class="form-control" id="threshold_value" name="threshold_value" min="1" max="100" value="50" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">候選人</label>
+                        <div id="candidates-container">
+                            <div class="candidate-input mb-2 input-group">
+                                <input type="text" class="form-control" name="candidates[]" placeholder="候選人姓名" required>
+                                <button type="button" class="btn btn-danger remove-candidate">移除</button>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-secondary mt-2" id="add-candidate">新增候選人</button>
+                    </div>
+
+                    <div class="text-end">
+                        <button type="submit" class="btn btn-primary">建立投票</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    // Add candidate button
+    $('#add-candidate').click(function() {
+        const candidateHtml = `
+            <div class="candidate-input mb-2 input-group">
+                <input type="text" class="form-control" name="candidates[]" placeholder="候選人姓名" required>
+                <button type="button" class="btn btn-danger remove-candidate">移除</button>
+            </div>
+        `;
+        $('#candidates-container').append(candidateHtml);
+    });
+
+    // Remove candidate button
+    $(document).on('click', '.remove-candidate', function() {
+        if ($('.candidate-input').length > 1) {
+            $(this).closest('.candidate-input').remove();
+        } else {
+            alert('至少需要一名候選人');
+        }
+    });
+
+    // Toggle threshold value input based on selected threshold type
+    $('input[name="threshold_type"]').change(function() {
+        if ($(this).val() === 'percentage') {
+            $('#percentage-container').show();
+        } else {
+            $('#percentage-container').hide();
+        }
+    });
+
+    // Form submit
+    $('#election-form').submit(function(e) {
+        e.preventDefault();
+
+        // Get candidates
+        const candidates = [];
+        $('input[name="candidates[]"]').each(function() {
+            candidates.push($(this).val());
+        });
+
+        // Get threshold settings
+        const thresholdType = $('input[name="threshold_type"]:checked').val();
+        let thresholdValue = 0;
+
+        if (thresholdType === 'percentage') {
+            thresholdValue = parseInt($('#threshold_value').val()) / 100;
+        } else if (thresholdType === 'majority') {
+            thresholdValue = 0.5;
+        }
+
+        // Create data object
+        const data = {
+            title: $('#title').val(),
+            total_voters: parseInt($('#total_voters').val()),
+            threshold_type: thresholdType,
+            threshold_value: thresholdValue,
+            candidates: candidates
+        };
+
+        // Submit data via AJAX
+        $.ajax({
+            type: 'POST',
+            url: '{{ url_for("main.new_election") }}',
+            contentType: 'application/json',
+            data: JSON.stringify(data),
+            success: function(response) {
+                if (response.success) {
+                    // Redirect to the election page
+                    window.location.href = '/election/' + response.election_id;
+                }
+            },
+            error: function(error) {
+                console.error(error);
+                alert('發生錯誤，請再試一次');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

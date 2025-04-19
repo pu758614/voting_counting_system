@@ -1,0 +1,262 @@
+{% extends "base.html" %}
+
+{% block title %}{{ election.title }} - 投票開票系統{% endblock %}
+
+{% block content %}
+<div class="row mb-3">
+    <div class="col-md-12">
+        <h1>{{ election.title }}</h1>
+        <div class="d-flex justify-content-between align-items-center">
+            <p class="lead mb-0">總選民數：{{ election.total_voters }} |
+                當選條件：{% if election.threshold_type == 'percentage' %}獲得總選民數的 {{ (election.threshold_value * 100) | int }}%{% else %}過半數{% endif %}
+            </p>
+            <div>
+                <a href="{{ url_for('main.index') }}" class="btn btn-secondary">返回</a>
+                {% if not election.is_completed %}
+                <button id="save-button" class="btn btn-success">儲存結果</button>
+                {% endif %}
+                {% if election.is_completed %}
+                <a href="{{ url_for('main.export_election', election_id=election.id) }}" class="btn btn-info">匯出結果</a>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-7">
+        <div class="card">
+            <div class="card-header">
+                <h5>候選人開票</h5>
+                {% if election.is_completed %}
+                <span class="badge bg-success">開票已完成</span>
+                {% endif %}
+            </div>
+            <div class="card-body">
+                {% if candidates %}
+                <div class="table-responsive">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th style="width: 40%">候選人</th>
+                                <th style="width: 20%">得票數</th>
+                                <th style="width: 40%">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for candidate in candidates %}
+                            <tr class="candidate-row {% if candidate.is_elected %}table-success{% endif %}" data-id="{{ candidate.id }}">
+                                <td>{{ candidate.name }}</td>
+                                <td class="votes-count">{{ candidate.votes }}</td>
+                                <td>
+                                    {% if not election.is_completed %}
+                                    <button class="btn btn-primary vote-button" data-type="+" data-id="{{ candidate.id }}">+1</button>
+                                    <button class="btn btn-danger vote-button" data-type="-" data-id="{{ candidate.id }}">-1</button>
+                                    {% endif %}
+                                    {% if candidate.is_elected %}
+                                    <span class="badge bg-success">已當選</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p>沒有候選人。</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-5">
+        <div class="card">
+            <div class="card-header">
+                <h5>投票紀錄</h5>
+            </div>
+            <div class="card-body">
+                <div id="vote-logs" class="vote-log-container">
+                    {% if vote_logs %}
+                    {% for log in vote_logs %}
+                    <div class="log-entry">
+                        <span class="log-time">{{ log.timestamp.strftime('%H:%M:%S') }}</span>
+                        <span class="log-candidate">{{ log.candidate.name }}</span>
+                        <span class="log-action {% if log.vote_type == '+' %}text-success{% else %}text-danger{% endif %}">
+                            {{ log.vote_type }}1
+                        </span>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p>還沒有投票紀錄。</p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 確認對話框 -->
+<div class="modal fade" id="confirmModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">確認投票</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="confirm-message"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" id="confirm-vote">確認</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 當選提醒對話框 -->
+<div class="modal fade" id="electedModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">候選人已達當選條件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p id="elected-message"></p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">繼續</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+$(document).ready(function() {
+    let currentVote = null;
+    const confirmModal = new bootstrap.Modal(document.getElementById('confirmModal'));
+    const electedModal = new bootstrap.Modal(document.getElementById('electedModal'));
+
+    // Vote button click
+    $('.vote-button').click(function() {
+        const type = $(this).data('type');
+        const candidateId = $(this).data('id');
+        const candidateName = $(this).closest('tr').find('td:first').text();
+
+        if (type === '+') {
+            $('#confirm-message').text(`確定要為 ${candidateName} 增加一票嗎？`);
+        } else {
+            $('#confirm-message').text(`確定要為 ${candidateName} 減少一票嗎？`);
+        }
+
+        currentVote = {
+            type: type,
+            candidateId: candidateId
+        };
+
+        confirmModal.show();
+    });
+
+    // Confirm vote button
+    $('#confirm-vote').click(function() {
+        if (currentVote) {
+            submitVote(currentVote.candidateId, currentVote.type);
+            confirmModal.hide();
+        }
+    });
+
+    // Save button
+    $('#save-button').click(function() {
+        if (confirm('確定要儲存當前開票結果嗎？儲存後將無法再進行投票。')) {
+            $.ajax({
+                type: 'POST',
+                url: '{{ url_for("main.save_election", election_id=election.id) }}',
+                contentType: 'application/json',
+                data: JSON.stringify({ save: true }),
+                success: function(response) {
+                    if (response.success) {
+                        // Reload the page
+                        location.reload();
+                    }
+                },
+                error: function(error) {
+                    console.error(error);
+                    alert('發生錯誤，請再試一次');
+                }
+            });
+        }
+    });
+
+    function submitVote(candidateId, voteType) {
+        $.ajax({
+            type: 'POST',
+            url: '{{ url_for("main.vote", election_id=election.id) }}',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                candidate_id: candidateId,
+                vote_type: voteType
+            }),
+            success: function(response) {
+                if (response.success) {
+                    // Update vote count
+                    const candidateRow = $(`.candidate-row[data-id="${candidateId}"]`);
+                    candidateRow.find('.votes-count').text(response.votes);
+
+                    // Add to vote log
+                    const now = new Date();
+                    const timeStr = now.toLocaleTimeString('zh-TW', {hour12: false});
+                    const logHtml = `
+                        <div class="log-entry">
+                            <span class="log-time">${timeStr}</span>
+                            <span class="log-candidate">${response.candidate_name}</span>
+                            <span class="log-action ${voteType === '+' ? 'text-success' : 'text-danger'}">
+                                ${voteType}1
+                            </span>
+                        </div>
+                    `;
+                    $('#vote-logs').prepend(logHtml);
+
+                    // Check if candidate is elected
+                    if (response.elected) {
+                        // Add elected badge
+                        if (!candidateRow.hasClass('table-success')) {
+                            candidateRow.addClass('table-success');
+                            candidateRow.find('td:last').append('<span class="badge bg-success">已當選</span>');
+
+                            // Show elected notification
+                            $('#elected-message').text(`${response.candidate_name} 已達到當選條件！`);
+                            electedModal.show();
+                        }
+                    }
+                }
+            },
+            error: function(error) {
+                console.error(error);
+                alert('投票失敗，請再試一次');
+            }
+        });
+    }
+});
+</script>
+<style>
+.vote-log-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+.log-entry {
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+}
+.log-time {
+    color: #666;
+    margin-right: 10px;
+}
+.log-candidate {
+    font-weight: bold;
+    margin-right: 10px;
+}
+</style>
+{% endblock %}
