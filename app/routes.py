@@ -2,19 +2,52 @@ import io
 import json
 from datetime import datetime
 import pytz
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for, make_response
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, make_response, flash
 from app import db
-from app.models import Election, Candidate, VoteLog, taipei_tz, taipei_time
+from app.models import Election, Candidate, VoteLog, taipei_tz, taipei_time, User
 import xlsxwriter
+from flask_login import login_user, logout_user, login_required, current_user
+from werkzeug.urls import url_parse
 
 main_bp = Blueprint('main', __name__)
 
+@main_bp.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('main.index'))
+
+    if request.method == 'POST':
+        username = request.form['username']
+        password = request.form['password']
+
+        user = User.query.filter_by(username=username).first()
+
+        if user is None or not user.check_password(password):
+            flash('帳號或密碼錯誤')
+            return redirect(url_for('main.login'))
+
+        login_user(user)
+        next_page = request.args.get('next')
+        if not next_page or url_parse(next_page).netloc != '':
+            next_page = url_for('main.index')
+
+        return redirect(next_page)
+
+    return render_template('login.html')
+
+@main_bp.route('/logout')
+def logout():
+    logout_user()
+    return redirect(url_for('main.login'))
+
 @main_bp.route('/')
+@login_required
 def index():
     elections = Election.query.order_by(Election.created_at.desc()).all()
     return render_template('index.html', elections=elections)
 
 @main_bp.route('/election/new', methods=['GET', 'POST'])
+@login_required
 def new_election():
     if request.method == 'POST':
         data = request.json
@@ -39,6 +72,7 @@ def new_election():
     return render_template('new_election.html')
 
 @main_bp.route('/election/<int:election_id>')
+@login_required
 def view_election(election_id):
     election = Election.query.get_or_404(election_id)
     candidates = Candidate.query.filter_by(election_id=election_id).all()
@@ -47,6 +81,7 @@ def view_election(election_id):
     return render_template('view_election.html', election=election, candidates=candidates, vote_logs=vote_logs)
 
 @main_bp.route('/election/<int:election_id>/delete', methods=['POST'])
+@login_required
 def delete_election(election_id):
     try:
         # First delete all vote logs associated with this election
@@ -66,6 +101,7 @@ def delete_election(election_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @main_bp.route('/election/<int:election_id>/vote', methods=['POST'])
+@login_required
 def vote(election_id):
     data = request.json
     candidate_id = data['candidate_id']
@@ -110,6 +146,7 @@ def vote(election_id):
     })
 
 @main_bp.route('/election/<int:election_id>/save', methods=['POST'])
+@login_required
 def save_election(election_id):
     election = Election.query.get_or_404(election_id)
     election.is_completed = True
@@ -118,6 +155,7 @@ def save_election(election_id):
     return jsonify({'success': True})
 
 @main_bp.route('/election/<int:election_id>/export')
+@login_required
 def export_election(election_id):
     election = Election.query.get_or_404(election_id)
     candidates = Candidate.query.filter_by(election_id=election_id).all()

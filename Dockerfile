@@ -2,17 +2,22 @@ FROM python:3.9-slim
 
 WORKDIR /app
 
+# Install dependencies
 COPY requirements.txt .
-
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Create data directory
+RUN mkdir -p /data
+
+# Copy application code
 COPY . /app/
 
-# Create data directory for SQLite
-RUN mkdir -p /data
-ENV DATABASE_URL=sqlite:////data/vote_system.db
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV FLASK_APP=app
 
+# Expose port
 EXPOSE 8080
 
-# Use Gunicorn as the production server
+# Run the application with Gunicorn
 CMD ["gunicorn", "--bind", "0.0.0.0:8080", "wsgi:app"]

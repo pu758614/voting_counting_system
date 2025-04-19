@@ -1,6 +1,8 @@
 from datetime import datetime
 import pytz
 from app import db
+from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
 
 # Define the Taipei timezone
 taipei_tz = pytz.timezone('Asia/Taipei')
@@ -8,6 +10,20 @@ taipei_tz = pytz.timezone('Asia/Taipei')
 def taipei_time():
     """Return current time in Taipei timezone"""
     return datetime.now(taipei_tz)
+
+class User(UserMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(64), index=True, unique=True)
+    password_hash = db.Column(db.String(128))
+
+    def set_password(self, password):
+        self.password_hash = generate_password_hash(password)
+
+    def check_password(self, password):
+        return check_password_hash(self.password_hash, password)
+
+    def __repr__(self):
+        return f'<User {self.username}>'
 
 class Election(db.Model):
     id = db.Column(db.Integer, primary_key=True)
